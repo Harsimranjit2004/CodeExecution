@@ -13,6 +13,7 @@
   "dependencies": {
     "@kubernetes/client-node": "^1.1.0",
     "@types/express": "^5.0.1",
+    "axios": "^1.8.4",
     "express": "^4.21.2",
     "redis": "^4.7.0",
     "uuid": "^11.1.0"
