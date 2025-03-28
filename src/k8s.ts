@@ -119,7 +119,8 @@ export class kubernetesManager {
     async scaleDeployment(name: string, replicas: number): Promise<void> {
         try {
             const patch = { spec: { replicas } };
-            await this.k8appApi.patchNamespacedDeployment({ name: name, namespace: this.namespace, body: patch })
+            const patchResponse = await this.k8appApi.patchNamespacedDeployment({ name: name, namespace: this.namespace, body: patch })
+            console.log('Scaling succeeded. Patch response:', patchResponse);
         } catch (error) {
             console.error('failed to scaled');
         }
