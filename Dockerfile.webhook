@@ -1,0 +1,8 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY dist/webhook.js ./dist/
+COPY dist/logger.js ./dist/
+EXPOSE 3001
+CMD ["node", "dist/webhook.js"]

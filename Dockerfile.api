@@ -1,0 +1,10 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY dist/api.js ./dist/
+COPY dist/k8s.js ./dist/
+COPY dist/orchestrator.js ./dist/
+COPY dist/logger.js ./dist/
+EXPOSE 3000
+CMD ["node", "dist/api.js"]

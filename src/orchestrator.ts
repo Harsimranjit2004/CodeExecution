@@ -101,7 +101,7 @@ export class Orchestrator {
         return parseInt(cpu);
     }
 
-    private startScalingLoop(): void {
+    startScalingLoop(): void {
         if (this.scalingInterval) {
             clearInterval(this.scalingInterval)
         }

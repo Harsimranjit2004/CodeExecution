@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-worker-deployment
+spec:
+  replicas: 2  # Start with 2 workers
+  selector:
+    matchLabels:
+      app: code-worker
+  template:
+    metadata:
+      labels:
+        app: code-worker
+    spec:
+      containers:
+      - name: worker
+        image: code-execution-worker:latest
+        imagePullPolicy: Never  # Use local image
+        env:
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
