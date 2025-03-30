@@ -1,5 +1,5 @@
-import { kubernetesManager } from './k8s.js';
 import * as k8s from '@kubernetes/client-node';
+import { kubernetesManager } from "./k8s.js" // Adjust path as needed
 
 // Utility function for controlled waiting with a message
 const wait = async (seconds: number, message: string) => {
@@ -11,7 +11,7 @@ const wait = async (seconds: number, message: string) => {
 // Main execution function
 (async () => {
     try {
-        console.log("🚀 Starting Kubernetes test with improved metrics handling");
+        console.log("🚀 Starting Kubernetes test with scaling functionality");
         const k8 = new kubernetesManager();
 
         // List all namespaces
@@ -19,22 +19,23 @@ const wait = async (seconds: number, message: string) => {
         const namespaces = await k8.listNamespaces();
         console.log(`Found ${namespaces.length} namespaces: ${namespaces.join(', ')}`);
 
-        const label = "app=nginx";
+        // --- Test Pod Creation and Metrics ---
+        const podLabel = "app=nginx";
         const podName = "test-nginx";
 
         // Check for existing pods
-        console.log(`📌 Checking for existing pods with label "${label}"...`);
-        const existingCount = await k8.getPodWithLabel(label);
-        console.log(`Found ${existingCount} pod(s) with label ${label}`);
+        console.log(`📌 Checking for existing pods with label "${podLabel}"...`);
+        const existingPodCount = await k8.getPodWithLabel(podLabel);
+        console.log(`Found ${existingPodCount} pod(s) with label ${podLabel}`);
 
         // Delete existing pod if found
-        if (existingCount > 0) {
+        if (existingPodCount > 0) {
             console.log(`⚠️ Pod "${podName}" already exists. Deleting...`);
             await k8.deletePod(podName);
             await wait(10, "Waiting for pod deletion to complete");
 
             // Verify deletion
-            const countAfterDelete = await k8.getPodWithLabel(label);
+            const countAfterDelete = await k8.getPodWithLabel(podLabel);
             if (countAfterDelete > 0) {
                 throw new Error(`Failed to delete pod "${podName}"`);
             }
@@ -74,46 +75,103 @@ const wait = async (seconds: number, message: string) => {
         const createdPod = await k8.createPod(pod);
         console.log(`✅ Pod created: ${createdPod.metadata?.name}`);
 
-        // Wait longer for pod to become ready
+        // Wait for pod to become ready
         await wait(30, "Waiting for pod to start and become ready");
 
-        // Add a check for pod readiness before checking metrics
-        console.log("🔍 Verifying pod is in Running state...");
-        // Implement k8.getPodStatus or similar function to check pod status
-        // const status = await k8.getPodStatus(podName);
-        // console.log(`Current pod status: ${status}`);
-
-        // Retry logic with exponential backoff
+        // Fetch pod metrics with retry logic
         let usage: any = [];
         let attempts = 5;
-        let waitTime = 10; // Start with 10 seconds wait
+        let waitTime = 10;
 
         while (attempts-- > 0 && usage.length === 0) {
             console.log(`📈 Fetching pod resource usage (attempt ${5 - attempts}/5)...`);
-            usage = await k8.topPods(label);
+            usage = await k8.topPods(podLabel);
 
             if (usage.length === 0) {
                 console.log(`ℹ️ No metrics available yet, backing off...`);
                 await wait(waitTime, `Waiting before next metrics attempt`);
-                waitTime = Math.min(waitTime * 2, 60); // Exponential backoff with max 60s
+                waitTime = Math.min(waitTime * 2, 60);
             }
         }
 
-        // Process and display the results
         if (usage.length > 0) {
             console.log("✅ Pod resource usage successfully retrieved:");
             console.table(usage);
         } else {
             console.warn("⚠️ No resource usage data available after multiple attempts.");
-            console.log("👉 You might want to check if metrics-server is properly installed in your cluster");
-            console.log("👉 Try running: kubectl top pod -n <namespace>");
         }
 
-        // Clean up the pod
+        // Clean up the test pod
         console.log("🧹 Cleaning up: Deleting test pod...");
         await k8.deletePod(podName);
         await wait(5, "Confirming pod deletion");
         console.log("✅ Test pod deleted successfully");
+
+        // --- Test Scaling Deployment ---
+        const deploymentName = "nginx-deployment";
+        const deploymentLabel = "app=nginx-deployment";
+
+        // Create a simple Nginx deployment
+        const deployment: k8s.V1Deployment = {
+            metadata: {
+                name: deploymentName,
+                labels: { app: "nginx-deployment" }
+            },
+            spec: {
+                replicas: 2,  // Start with 2 replicas
+                selector: {
+                    matchLabels: { app: "nginx-deployment" }
+                },
+                template: {
+                    metadata: {
+                        labels: { app: "nginx-deployment" }
+                    },
+                    spec: {
+                        containers: [
+                            {
+                                name: "nginx",
+                                image: "nginx",
+                                ports: [{ containerPort: 80 }],
+                                resources: {
+                                    requests: { cpu: "100m", memory: "64Mi" },
+                                    limits: { cpu: "200m", memory: "128Mi" }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        };
+
+        console.log("📌 Creating Nginx Deployment...");
+        await k8.createDeployment(deployment);  // Add this method below
+        await wait(30, "Waiting for deployment to stabilize");
+
+        // Check initial deployment status
+        console.log("📌 Checking initial deployment status...");
+        let status = await k8.getDeploymentStatus(deploymentName);
+        console.log(`Initial status: ${JSON.stringify(status, null, 2)}`);
+
+        // Scale the deployment to 4 replicas
+        console.log("📌 Scaling deployment to 4 replicas...");
+        await k8.scaleDeployment(deploymentName, 4);
+        await wait(30, "Waiting for scaling to complete");
+
+        // Verify scaling
+        console.log("📌 Verifying deployment status after scaling...");
+        status = await k8.getDeploymentStatus(deploymentName);
+        console.log(`Status after scaling: ${JSON.stringify(status, null, 2)}`);
+
+        // List pods to confirm scaling
+        console.log("📌 Listing deployment pods after scaling...");
+        const pods = await k8.listDeploymentPods(deploymentName);
+        console.table(pods);
+
+        // Clean up the deployment
+        console.log("🧹 Cleaning up: Deleting test deployment...");
+        await k8.deleteDeployment(deploymentName);  // Add this method below
+        await wait(10, "Confirming deployment deletion");
+        console.log("✅ Test deployment deleted successfully");
 
         console.log("🎉 Test completed!");
     } catch (error) {

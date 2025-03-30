@@ -118,28 +118,61 @@ export class kubernetesManager {
 
     async scaleDeployment(name: string, replicas: number): Promise<void> {
         try {
-            const patch: k8s.V1Scale = { spec: { replicas } };
-            const request: k8s.AppsV1ApiPatchNamespacedDeploymentScaleRequest = {
-                name,
+            // Get the current deployment
+            const response = await this.k8appApi.readNamespacedDeployment({
+                name: name,
+                namespace: this.namespace
+            });
+
+            // Extract the deployment object
+            let deployment = response
+
+            // Update the replicas
+            if (deployment.spec) {
+                deployment.spec.replicas = replicas;
+            } else {
+                throw new Error('Deployment spec is undefined');
+            }
+
+            // Replace the deployment with the updated version
+            await this.k8appApi.replaceNamespacedDeployment({
+                name: name,
                 namespace: this.namespace,
-                body: patch,
-                pretty: undefined,
-                dryRun: undefined,
-                fieldManager: undefined,
-                fieldValidation: undefined,
-                force: undefined
-            };
-            const options = {
-                headers: { 'Content-Type': 'application/merge-patch+json' }
-            };
-            const patchResponse = await this.k8appApi.patchNamespacedDeploymentScale(request);
-            console.log('Scaling succeeded. Patch response:', { ...patchResponse });
+                body: deployment
+            });
+
+            console.log(`Deployment ${name} successfully scaled to ${replicas} replicas`);
         } catch (error: any) {
             console.error('Scaling failed with error:', error.response ? error.response.body : error);
             throw error;
         }
     }
+    async createDeployment(deployment: k8s.V1Deployment): Promise<k8s.V1Deployment> {
+        try {
+            const response = await this.k8appApi.createNamespacedDeployment({
+                namespace: this.namespace,
+                body: deployment
+            });
+            console.log('Deployment created:', response.metadata?.name);
+            return response;
+        } catch (error:any) {
+            console.error('Failed to create deployment:', error.response ? error.response.body : error);
+            throw error;
+        }
+    }
 
+    async deleteDeployment(name: string): Promise<void> {
+        try {
+            await this.k8appApi.deleteNamespacedDeployment({
+                name,
+                namespace: this.namespace
+            });
+            console.log('Deployment deleted:', name);
+        } catch (error:any) {
+            console.error('Failed to delete deployment:', error.response ? error.response.body : error);
+            throw error;
+        }
+    }
     async getDeploymentStatus(name: string): Promise<{ name: string, replicas: number, availableReplicas: number, readyReplicas: number; }> {
         try {
             const response: k8s.V1Deployment = await this.k8appApi.readNamespacedDeployment({ name: name, namespace: this.namespace });
