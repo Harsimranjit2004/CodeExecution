@@ -2,6 +2,7 @@ import { createClient } from "redis";
 import { kubernetesManager } from "./k8s.js";
 import { logger } from "./logger.js";
 import { v4 as uuidv4 } from 'uuid'
+import * as k8s from '@kubernetes/client-node'
 interface ScalingConfig {
     minPods: number;
     maxPods: number;
@@ -94,6 +95,7 @@ export class Orchestrator {
             logger.error('Scaling error:', error);
         }
     }
+
     private parseCpu(cpu: string): number {
         if (cpu.endsWith('n')) return parseInt(cpu) / 1e9;
         if (cpu.endsWith('u')) return parseInt(cpu) / 1e6;

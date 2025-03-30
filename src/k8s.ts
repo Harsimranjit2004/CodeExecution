@@ -118,11 +118,25 @@ export class kubernetesManager {
 
     async scaleDeployment(name: string, replicas: number): Promise<void> {
         try {
-            const patch = { spec: { replicas } };
-            const patchResponse = await this.k8appApi.patchNamespacedDeployment({ name: name, namespace: this.namespace, body: patch })
-            console.log('Scaling succeeded. Patch response:', patchResponse);
-        } catch (error) {
-            console.error('failed to scaled');
+            const patch: k8s.V1Scale = { spec: { replicas } };
+            const request: k8s.AppsV1ApiPatchNamespacedDeploymentScaleRequest = {
+                name,
+                namespace: this.namespace,
+                body: patch,
+                pretty: undefined,
+                dryRun: undefined,
+                fieldManager: undefined,
+                fieldValidation: undefined,
+                force: undefined
+            };
+            const options = {
+                headers: { 'Content-Type': 'application/merge-patch+json' }
+            };
+            const patchResponse = await this.k8appApi.patchNamespacedDeploymentScale(request);
+            console.log('Scaling succeeded. Patch response:', { ...patchResponse });
+        } catch (error: any) {
+            console.error('Scaling failed with error:', error.response ? error.response.body : error);
+            throw error;
         }
     }
 
