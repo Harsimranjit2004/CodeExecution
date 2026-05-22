@@ -23,7 +23,7 @@ const QUEUE_NAME = 'code-execution-queue';
 
 
 export class Orchestrator {
-    private redisClient: ReturnType<typeof createClient> | null = null;
+    public redisClient: ReturnType<typeof createClient> | null = null;
     private k8sManager: kubernetesManager;
     private config: ScalingConfig;
     private deploymentName: string;
@@ -60,41 +60,62 @@ export class Orchestrator {
             logger.info('Redis client connected');
         }
     }
-    private async getRedisClient(): Promise<ReturnType<typeof createClient>> {
+    public async getRedisClient(): Promise<ReturnType<typeof createClient>> {
         if (!this.redisClient) {
             throw new Error('Redis client not initialized');
         }
         return this.redisClient;
     }
     private async scaleWorkers(): Promise<void> {
-        try {
-            const redis = await this.getRedisClient();
-            const queueLength = await redis.LLEN(QUEUE_NAME)
-            const currentPods = await this.k8sManager.getPodWithLabel(this.podSelector);
-            const metrics = await this.k8sManager.topPods(this.podSelector);
-            let desiredPods = Math.max(
-                this.config.minPods,
-                Math.min(this.config.maxPods, Math.ceil(queueLength / this.config.jobsPerPod))
-            )
-            if (metrics.length > 0) {
-                const totalCpu = metrics.reduce((sum, pod) => sum + this.parseCpu(pod.cpu), 0);
-                const avgCpuPerPod = currentPods > 0 ? totalCpu / currentPods : 0;
-                if (avgCpuPerPod > 0.8) {
-                    desiredPods = Math.min(this.config.maxPods, desiredPods + 1);
-                    logger.info(`CPU usage high (${avgCpuPerPod.toFixed(2)} cores/pod), scaling up`);
-                }
-            }
-            if (currentPods !== desiredPods) {
-                logger.info(`Scaling workers: ${currentPods} → ${desiredPods} (queue: ${queueLength}, CPU: ${metrics[0]?.cpu || 'N/A'})`);
-                await this.k8sManager.scaleDeployment(this.deploymentName, desiredPods);
-            } else {
-                logger.debug(`No scaling needed: ${currentPods} pods, ${queueLength} jobs`);
-            }
+    try {
+        const redis = await this.getRedisClient();
+        const queueLength = await redis.LLEN(QUEUE_NAME);
+        const currentPods = await this.k8sManager.getPodWithLabel(this.podSelector);
+        
+        const desiredPods = Math.max(
+            this.config.minPods,
+            Math.min(this.config.maxPods, Math.ceil(queueLength / this.config.jobsPerPod))
+        );
 
-        } catch (error) {
-            logger.error('Scaling error:', error);
+        if (currentPods !== desiredPods) {
+            logger.info(`Scaling workers: ${currentPods} → ${desiredPods} (queue: ${queueLength})`);
+            await this.k8sManager.scaleDeployment(this.deploymentName, desiredPods);
+        } else {
+            logger.debug(`No scaling needed: ${currentPods} pods, ${queueLength} jobs`);
         }
+    } catch (error) {
+        logger.error('Scaling error:', error);
     }
+}
+    // private async scaleWorkers(): Promise<void> {
+    //     try {
+    //         const redis = await this.getRedisClient();
+    //         const queueLength = await redis.LLEN(QUEUE_NAME)
+    //         const currentPods = await this.k8sManager.getPodWithLabel(this.podSelector);
+    //         const metrics = await this.k8sManager.topPods(this.podSelector);
+    //         let desiredPods = Math.max(
+    //             this.config.minPods,
+    //             Math.min(this.config.maxPods, Math.ceil(queueLength / this.config.jobsPerPod))
+    //         )
+    //         if (metrics.length > 0) {
+    //             const totalCpu = metrics.reduce((sum, pod) => sum + this.parseCpu(pod.cpu), 0);
+    //             const avgCpuPerPod = currentPods > 0 ? totalCpu / currentPods : 0;
+    //             if (avgCpuPerPod > 0.8) {
+    //                 desiredPods = Math.min(this.config.maxPods, desiredPods + 1);
+    //                 logger.info(`CPU usage high (${avgCpuPerPod.toFixed(2)} cores/pod), scaling up`);
+    //             }
+    //         }
+    //         if (currentPods !== desiredPods) {
+    //             logger.info(`Scaling workers: ${currentPods} → ${desiredPods} (queue: ${queueLength}, CPU: ${metrics[0]?.cpu || 'N/A'})`);
+    //             await this.k8sManager.scaleDeployment(this.deploymentName, desiredPods);
+    //         } else {
+    //             logger.debug(`No scaling needed: ${currentPods} pods, ${queueLength} jobs`);
+    //         }
+
+    //     } catch (error) {
+    //         logger.error('Scaling error:', error);
+    //     }
+    // }
 
     private parseCpu(cpu: string): number {
         if (cpu.endsWith('n')) return parseInt(cpu) / 1e9;

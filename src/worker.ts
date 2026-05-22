@@ -129,7 +129,8 @@ export class Worker {
             }
             const effectiveMemoryLimit = memory_limit || 512;
             const timeoutInSeconds = Math.ceil(effectiveTimeout / 1000);
-            const command = `bash -c "ulimit -v ${effectiveMemoryLimit * 1024} && timeout ${timeoutInSeconds}s ${config.execute(tempFilePath)}"`;
+            const command = `sh -c "ulimit -v ${effectiveMemoryLimit * 1024} && timeout ${timeoutInSeconds}s ${config.execute(tempFilePath)}"`;
+            // const command = `bash -c "ulimit -v ${effectiveMemoryLimit * 1024} && timeout ${timeoutInSeconds}s ${config.execute(tempFilePath)}"`;
             startTime = process.hrtime();
             const { stdout, stderr } = await execAsync(command);
             const [seconds, nanoseconds] = process.hrtime(startTime);
@@ -188,6 +189,8 @@ export class Worker {
                 logger.info(`[${this.workerId}] Webhook sent to ${job.callback_url} for token ${job.token}`);
 
                 const result = await this.executeCode(job);
+                // Store result in Redis
+                await redis.set(`result:${job.token}`, JSON.stringify({ ...result, token: job.token }), { EX: 3600 });
 
                 if (job.callback_url) {
                     try {
@@ -213,5 +216,5 @@ export class Worker {
     }
 }
 
-const worker = new Worker({ host: 'localhost', port: 6379 });
+const worker = new Worker({ host: process.env.REDIS_HOST || 'localhost', port: Number(process.env.REDIS_PORT) || 6379 });
 worker.start();

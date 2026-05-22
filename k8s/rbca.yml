@@ -8,7 +8,7 @@ rules:
   verbs: ["list"]
 - apiGroups: ["apps"]
   resources: ["deployments", "deployments/scale"]
-  verbs: ["get", "list", "patch"]
+  verbs: ["get", "list", "patch", "update"]  # For scaling deployments
 - apiGroups: ["metrics.k8s.io"]
   resources: ["pods"]
   verbs: ["list", "get"]  # For metrics server

@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { logger } from './logger.js';
 import { Orchestrator, JobData } from './orchestrator.js';
-
+import cors from 'cors';
 interface Submission {
     source_code: string;
     language_id: number;
@@ -14,6 +14,7 @@ interface Submission {
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+app.use(cors());
 
 let orchestrator: Orchestrator;
 async function initializeOrchestrator() {
@@ -73,7 +74,20 @@ export function startApi(port: number = 3000) {
     app.get('/health', (req: Request, res: Response) => {
         res.status(200).json({ status: 'healthy' });
     });
+    app.get('/status/:token', async (req: any, res: any) => {
+    const { token } = req.params;
+    const redis = await orchestrator.getRedisClient();
+    const result = await redis.get(`result:${token}`);
+    if (!result) {
+        return res.status(200).json({ status: 'pending', token });
+    }
+    return res.status(200).json(JSON.parse(result));
+    });
 
+    app.get('/metrics', async (req: any, res: any) => {
+    const status = await orchestrator.getQueueStatus();
+    res.status(200).json(status);
+    });
     app.listen(port, async () => {
         logger.info(`API server started on port ${port}`);
         await initializeOrchestrator();
